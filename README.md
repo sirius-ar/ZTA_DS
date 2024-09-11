@@ -1,19 +1,19 @@
 <div align="center">
 
-[![Typing SVG](https://readme-typing-svg.demolab.com?font=Fira+Code&size=60&pause=800&center=true&vCenter=true&random=false&width=535&height=100&lines=Blazor+ZTI+🔥)](https://git.io/typing-svg)
+[![Typing SVG](https://readme-typing-svg.demolab.com?font=Fira+Code&size=60&pause=800&center=true&vCenter=true&random=false&width=535&height=100&lines=ZTA_DS+🔥)](https://git.io/typing-svg)
 
 </div>
 
 
 
 <div align="center">
-      <h1> <img src="static/images/logo.png" width="80px"><br/>Blazor ZTI</h1>
+      <h1> <img src="static/images/logo.png" width="80px"><br/>ZTA_DS</h1>
      </div>
 <!-- <p align="center"> <a href="https://linkedin.com/in/kvhkc" target="_blank"><img alt="" src="https://img.shields.io/badge/LinkedIn-0077B5?style=normal&logo=linkedin&logoColor=white" style="vertical-align:center" /></a> </p> -->
 
-# Blazor ZTI: Zero Trust Identity - Keyless Authentication and Role-based Enforcement
+# ZTA_DS: Zero Trust Identity - Keyless Authentication and Role-based Enforcement
 
-Blazor ZTI is a Flask-based web application implementing a sophisticated Zero Trust Identity system with Role-Based Access Control (RBAC). This project aims to provide a robust, secure authentication and authorization framework suitable for enterprise-level applications requiring stringent security measures.
+ZTA_DS is a Flask-based web application implementing a sophisticated Zero Trust Identity system with Role-Based Access Control (RBAC). This project aims to provide a robust, secure authentication and authorization framework suitable for enterprise-level applications requiring stringent security measures.
 
 ## Key Features
 
