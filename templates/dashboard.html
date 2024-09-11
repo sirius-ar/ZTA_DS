@@ -1,0 +1,324 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    .stats-card {
+        height: 300px;
+    }
+</style>
+
+<h1>Dashboard</h1>
+<p>Welcome, <span id="username"></span>!</p>
+
+<div id="admin-dashboard" style="display: none;">
+    <h2><strong>Admin Dashboard</strong></h2>
+
+    <!-- System Stats Section -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h3 style="font-weight: bold;">System Stats</h3>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div id="cpu-usage" class="stats-card"></div>
+                        </div>
+                        <div class="col-md-6">
+                            <div id="memory-usage" class="stats-card"></div>
+                        </div>
+                    </div>
+                    <div class="row mt-4">
+                        <div class="col-md-6">
+                            <div id="disk-usage" class="stats-card"></div>
+                        </div>
+                        <div class="col-md-6">
+                            <div id="network-usage" class="stats-card"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const accessT = '{{ access_token }}';
+    const refreshT = '{{ refresh_token }}';
+    const inactivityTime = 5 * 60 * 1000; // 5 minutes of inactivity time
+    const updateInterval = 2 * 60 * 1000; // 2 minutes for session check interval
+    let inactivityTimer;
+    let lastActivityTime = Date.now();
+
+    // Store tokens in localStorage
+    localStorage.setItem('access_token_cookie', accessT);
+    localStorage.setItem('refresh_token_cookie', refreshT);
+
+    function getCookie(name) {
+        const value = `; ${document.cookie}`;
+        const parts = value.split(`; ${name}=`);
+        if (parts.length === 2) return parts.pop().split(';').shift();
+    }
+
+    function fetchWithT(url, options = {}) {
+        const token = localStorage.getItem('access_token_cookie');
+        if (!token) {
+            window.location.href = '/login';
+            return;
+        }
+        const csrfToken = getCookie('csrf_access_token');
+        const defaultOptions = {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'X-CSRF-TOKEN': csrfToken,
+                'Content-Type': 'application/json',
+            },
+        };
+        return fetch(url, { ...defaultOptions, ...options })
+            .then(response => {
+                if (response.status === 401) {
+                    return refreshToken().then(success => {
+                        if (success) {
+                            return fetchWithT(url, options);
+                        } else {
+                            window.location.href = '/login';
+                        }
+                    });
+                }
+                return response;
+            });
+    }
+
+    function refreshToken() {
+        const refreshToken = localStorage.getItem('refresh_token_cookie');
+        if (!refreshToken) {
+            return Promise.resolve(false);
+        }
+        const csrfToken = getCookie('csrf_refresh_token');
+        return fetch('/refresh', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${refreshToken}`,
+                'X-CSRF-TOKEN': csrfToken,
+                'Content-Type': 'application/json',
+            },
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.access_token) {
+                localStorage.setItem('access_token_cookie', data.access_token);
+                return true;
+            }
+            return false;
+        })
+        .catch(() => false);
+    }
+
+    function resetInactivityTimer() {
+        clearTimeout(inactivityTimer);
+        inactivityTimer = setTimeout(checkInactivity, inactivityTime);
+        lastActivityTime = Date.now();
+    }
+    
+    function checkInactivity() {
+        if (Date.now() - lastActivityTime >= inactivityTime) {
+            logout();
+        } else {
+            inactivityTimer = setTimeout(checkInactivity, inactivityTime - (Date.now() - lastActivityTime));
+        }
+    }
+
+    // function logout() {
+    //     localStorage.removeItem('access_token_cookie');
+    //     localStorage.removeItem('refresh_token_cookie');
+    //     window.location.href = '/logout';
+    // }
+    function logout() {
+    // Clear localStorage
+    localStorage.removeItem('access_token_cookie');
+    localStorage.removeItem('refresh_token_cookie');
+
+    // Clear sessionStorage
+    sessionStorage.clear();
+
+    // Clear all cookies
+    document.cookie.split(";").forEach(function(c) { 
+        document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/"); 
+    });
+
+    // Clear application cache if supported by the browser
+    if (window.applicationCache) {
+        window.applicationCache.abort();
+    }
+
+    // Clear any other client-side storage mechanisms
+    if (window.caches) {
+        caches.keys().then(function(names) {
+            for (let name of names)
+                caches.delete(name);
+        });
+    }
+
+    // Redirect to logout page
+    window.location.href = '/login';
+}
+    function updateServerActivity() {
+        fetchWithT('/update_activity', { method: 'POST' });
+    }
+
+    function checkSession() {
+        fetchWithT('/check_session')
+            .then(response => response.json())
+            .then(data => {
+                if (!data.valid) {
+                    logout();
+                }
+            });
+    }
+
+    document.addEventListener('mousemove', resetInactivityTimer);
+    document.addEventListener('keypress', resetInactivityTimer);
+
+    resetInactivityTimer();
+    setInterval(() => {
+        updateServerActivity();
+        checkSession();
+    }, updateInterval);
+
+    let networkChart;
+
+    function loadDashboardData() {
+        fetchWithT('/api/dashboard')
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('username').textContent = data.username;
+                if (data.role === 'admin') {
+                    document.getElementById('admin-dashboard').style.display = 'block';
+                    setInterval(fetchSystemStats, 10000);
+                    fetchSystemStats();
+                }
+            })
+            .catch(error => {
+                console.error('Error loading dashboard data:', error);
+            });
+    }
+    function fetchSystemStats() {
+        fetchWithT('/admin/system_stats')
+            .then(response => response.json())
+            .then(data => {
+                updateSystemStats(data);
+            })
+            .catch(error => {
+                console.error('Error fetching system stats:', error);
+            });
+    }
+
+    function updateSystemStats(data) {
+        const formattedTimestamps = data.timestamps.map(timestamp =>
+            new Date(timestamp * 1000).toLocaleTimeString()
+        );
+
+        const cpuTrace = {
+            labels: Object.keys(data.cpu_usage),
+            values: Object.values(data.cpu_usage),
+            type: 'pie',
+            name: 'CPU Usage'
+        };
+        console.log(data.cpu_usage);
+        const cpuLayout = {
+            title: 'CPU Usage'
+        };
+        Plotly.newPlot('cpu-usage', [cpuTrace], cpuLayout);
+
+        const memoryTrace = {
+            labels: Object.keys(data.memory_usage),
+            values: Object.values(data.memory_usage),
+            type: 'pie',
+            name: 'Memory Usage'
+        };
+        const memoryLayout = {
+            title: 'Memory Usage'
+        };
+        Plotly.newPlot('memory-usage', [memoryTrace], memoryLayout);
+
+        const diskTrace = {
+            labels: Object.keys(data.disk_usage),
+            values: Object.values(data.disk_usage),
+            type: 'pie',
+            name: 'Disk Usage'
+        };
+        const diskLayout = {
+            title: 'Disk Usage'
+        };
+        Plotly.newPlot('disk-usage', [diskTrace], diskLayout);
+
+        if (!networkChart) {
+            const networkTrace = {
+                x: formattedTimestamps,
+                y: data.network_usage,
+                type: 'scatter',
+                mode: 'lines+markers',
+                name: 'Network Usage'
+            };
+            const networkLayout = {
+                title: 'Network Usage',
+                yaxis: { title: 'MB' }
+            };
+            networkChart = Plotly.newPlot('network-usage', [networkTrace], networkLayout);
+        } else {
+            Plotly.update('network-usage', {
+                x: [formattedTimestamps],
+                y: [data.network_usage]
+            });
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', loadDashboardData);
+    // loadDashboardData();
+    
+
+const url =
+    'https://api.openweathermap.org/data/2.5/weather';
+const apiKey =
+    'f00c38e0279b7bc85480c3fe775d518c';
+ 
+$(document).ready(function () {
+    weatherFn('Pune');
+});
+ 
+async function weatherFn(cName) {
+    const temp =
+        `${url}?q=${cName}&appid=${apiKey}&units=metric`;
+    try {
+        const res = await fetch(temp);
+        const data = await res.json();
+        if (res.ok) {
+            weatherShowFn(data);
+        } else {
+            alert('City not found. Please try again.');
+        }
+    } catch (error) {
+        console.error('Error fetching weather data:', error);
+    }
+}
+ 
+function weatherShowFn(data) {
+    $('#city-name').text(data.name);
+    $('#date').text(moment().
+        format('MMMM Do YYYY, h:mm:ss a'));
+    $('#temperature').
+        html(`${data.main.temp}°C`);
+    $('#description').
+        text(data.weather[0].description);
+    $('#wind-speed').
+        html(`Wind Speed: ${data.wind.speed} m/s`);
+    $('#weather-icon').
+        attr('src',
+            `...`);
+    $('#weather-info').fadeIn();
+}
+
+</script>
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+{% endblock %}

@@ -1,0 +1,402 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+/* .list-group{ */
+/* } */
+</style>
+<h1>Admin Dashboard</h1>
+
+<div id="alert-container"></div>
+
+<div class="row mb-4">
+    <!-- Create User Card -->
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h2>Create New User</h2>
+            </div>
+            <div class="card-body">
+                <form id="create-user-form">
+                    <div class="mb-3 row">
+                        <div class="col-md-6">
+                            <input type="text" name="username" id="username" required placeholder="Username"
+                                class="form-control">
+                        </div>
+                        <div class="col-md-6">
+                            <input type="password" name="password" id="new-user-password" required
+                                placeholder="Password" class="form-control">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <select name="role" id="new-user-role" required class="form-control">
+                            <!-- Roles will be populated dynamically -->
+                        </select>
+                    </div>
+                    <button type="button" class="btn btn-primary" onclick="showConfirmModal('create_user')">Create
+                        User</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create New Role Card -->
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h2>Create New Role</h2>
+            </div>
+            <div class="card-body">
+                <form id="create-role-form">
+                    <div class="mb-3">
+                        <input type="text" name="new_role" id="new-role" required placeholder="New Role Name"
+                            class="form-control">
+                    </div>
+                    <button type="button" class="btn btn-primary" onclick="showConfirmModal('create_role')">Create
+                        Role</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <!-- Purge Duplicate Roles Card -->
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h2>Purge Duplicate Roles</h2>
+            </div>
+            <div class="card-body">
+                <button type="button" class="btn btn-warning" onclick="showConfirmModal('purge_roles')">Purge Duplicate
+                    Roles</button>
+            </div>
+        </div>
+    </div>
+    <!-- Manage Users Card -->
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h2>Manage Users</h2>
+            </div>
+            <div class="card-body">
+                <div class="input-group mb-3">
+                    <input type="text" id="user-search" class="form-control mb-3" placeholder="Search users...">
+                    <div class="input-group-prepend">
+                        <button class="btn btn-outline-success" type="button">Search 🔍</button>
+                    </div>
+                </div>
+                <div style="max-height: 150px; margin-bottom: 10px; overflow:scroll; -webkit-overflow-scrolling: touch;" id="user-list" class="list-group mb-3"></div>
+                <div id="user-details" class="d-none">
+                    <strong><h3 style="font-weight: bold;" id="selected-username"></h3></strong>
+                    <p style="font-weight: bold;">Current Role: <span style="font-weight: normal;" id="current-role"></span></p>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="action" id="change-role" value="role">
+                        <label class="form-check-label" for="change-role">
+                            Change Role
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="action" id="change-password"
+                            value="password">
+                        <label class="form-check-label" for="change-password">
+                            Change Password
+                        </label>
+                    </div>
+                    <div id="role-selection" class="mt-3 d-none">
+                        <select id="new-role" class="form-select">
+                            <!-- Roles will be populated dynamically -->
+                        </select>
+                    </div>
+                    <div id="password-change" class="mt-3 d-none">
+                        <input type="password" id="new-password" class="form-control" placeholder="New Password">
+                    </div>
+                    <button id="confirm-change" class="btn btn-primary mt-3">Confirm Change</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Confirmation Modal -->
+<div class="modal fade" id="confirmModal" tabindex="-1" aria-labelledby="confirmModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="confirmModalLabel">Confirm Action</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Please enter your admin password to confirm this action:</p>
+                <input type="password" id="admin-password" class="form-control" required>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="confirm-action">Confirm</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- QR Code Modal -->
+<div id="qr-code-modal" class="modal fade" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">QR Code</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-center">
+                <div id="qr-code-container"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let confirmModal;
+    let currentAction;
+    let users = [];
+    let roles = [];
+
+    document.addEventListener('DOMContentLoaded', function () {
+        confirmModal = new bootstrap.Modal(document.getElementById('confirmModal'));
+        fetchUsers();
+        fetchRoles();
+    });
+
+    function fetchUsers() {
+        fetch('/admin/users')
+            .then(response => response.json())
+            .then(data => {
+                users = data.users;
+                displayUsers(users);
+            });
+    }
+
+    function fetchRoles() {
+        fetch('/admin/roles')
+            .then(response => response.json())
+            .then(data => {
+                roles = data.roles;
+                populateRoleSelects();
+            })
+            .catch(error => {
+                console.error('Error fetching roles:', error);
+            });
+    }
+
+    function populateRoleSelects() {
+        const newUserRoleSelect = document.getElementById('new-user-role');
+        const changeRoleSelect = document.getElementById('new-role');
+
+        newUserRoleSelect.innerHTML = '';
+        changeRoleSelect.innerHTML = '';
+
+        roles.forEach(role => {
+            const newUserOption = new Option(role.name, role.name);
+            const changeRoleOption = new Option(role.name, role.name);
+            
+            newUserRoleSelect.add(newUserOption);
+            changeRoleSelect.add(changeRoleOption);
+        });
+    }
+
+    function showConfirmModal(action) {
+        currentAction = action;
+        confirmModal.show();
+    }
+
+    document.getElementById('confirm-action').addEventListener('click', function () {
+        const adminPassword = document.getElementById('admin-password').value;
+        if (currentAction === 'create_user') {
+            createUser(adminPassword);
+        } else if (currentAction === 'purge_roles') {
+            purgeRoles(adminPassword);
+        } else if (currentAction === 'create_role') {
+            createRole(adminPassword);
+        } else if (currentAction === 'change_role') {
+            changeRole(adminPassword);
+        } else if (currentAction === 'change_password') {
+            changePassword(adminPassword);
+        }
+    });
+
+    function createUser(adminPassword) {
+        const username = document.getElementById('username').value;
+        const password = document.getElementById('new-user-password').value;
+        const role = document.getElementById('new-user-role').value;
+
+        sendRequest('/admin', {
+            action: 'create_user',
+            username: username,
+            password: password,
+            role: role,
+            admin_password: adminPassword
+        });
+    }
+
+    function purgeRoles(adminPassword) {
+        sendRequest('/admin', {
+            action: 'purge_roles',
+            admin_password: adminPassword
+        });
+    }
+
+    function createRole(adminPassword) {
+        const newRole = document.getElementById('new-role').value;
+        sendRequest('/admin', {
+            action: 'create_role',
+            new_role: newRole,
+            admin_password: adminPassword
+        });
+    }
+
+    function changeRole(adminPassword) {
+        const username = document.getElementById('selected-username').textContent;
+        const newRole = document.getElementById('new-role').value;
+        sendRequest('/admin/manage_role', {
+            username: username,
+            new_role: newRole,
+            admin_password: adminPassword
+        });
+    }
+
+    function changePassword(adminPassword) {
+        const username = document.getElementById('selected-username').textContent;
+        const newPassword = document.getElementById('new-password').value;
+        sendRequest('/admin/manage_password', {
+            username: username,
+            new_password: newPassword,
+            admin_password: adminPassword
+        });
+    }
+
+    function sendRequest(url, data) {
+        fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
+        })
+            .then(response => response.json())
+            .then(data => {
+                confirmModal.hide();
+                showAlert(data.status, data.message);
+                if (data.status === 'success') {
+                    if (currentAction === 'create_user') {
+                        document.getElementById('create-user-form').reset();
+                    } else if (currentAction === 'create_role') {
+                        document.getElementById('create-role-form').reset();
+                    }
+                    fetchUsers();
+                    fetchRoles();
+                }
+            });
+    }
+
+    function showAlert(status, message) {
+        const alertContainer = document.getElementById('alert-container');
+        alertContainer.innerHTML = '';
+
+        const alertDiv = document.createElement('div');
+        alertDiv.classList.add('alert', status === 'success' ? 'alert-success' : 'alert-danger', 'alert-dismissible', 'fade', 'show');
+        alertDiv.setAttribute('role', 'alert');
+
+        alertDiv.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        `;
+
+        alertContainer.appendChild(alertDiv);
+    }
+
+    function filterUsers(query) {
+        return users.filter(user => user.username.toLowerCase().includes(query.toLowerCase()));
+    }
+
+    function displayUsers(filteredUsers) {
+        const userList = document.getElementById('user-list');
+        userList.innerHTML = '';
+        filteredUsers.forEach(user => {
+            const item = document.createElement('a');
+            item.href = '#';
+            item.classList.add('list-group-item', 'list-group-item-action');
+            item.textContent = user.username;
+            item.onclick = (e) => {
+                e.preventDefault();
+                showUserDetails(user);
+            };
+            userList.appendChild(item);
+        });
+    }
+
+    function showUserDetails(user) {
+        const userDetails = document.getElementById('user-details');
+        const selectedUsername = document.getElementById('selected-username');
+        const currentRole = document.getElementById('current-role');
+        const changeRole = document.getElementById('change-role');
+        const changePassword = document.getElementById('change-password');
+        const roleSelection = document.getElementById('role-selection');
+        const passwordChange = document.getElementById('password-change');
+
+        selectedUsername.textContent = user.username;
+        currentRole.textContent = user.role;
+        userDetails.classList.remove('d-none');
+        changeRole.checked = false;
+        changePassword.checked = false;
+        roleSelection.classList.add('d-none');
+        passwordChange.classList.add('d-none');
+    }
+
+    document.getElementById('user-search').addEventListener('input', (e) => {
+        const query = e.target.value;
+        const filteredUsers = filterUsers(query);
+        displayUsers(filteredUsers);
+    });
+
+    document.getElementById('change-role').addEventListener('change', () => {
+        const roleSelection = document.getElementById('role-selection');
+        roleSelection.classList.toggle('d-none', !document.getElementById('change-role').checked);
+        document.getElementById('password-change').classList.add('d-none');
+        
+        if (document.getElementById('change-role').checked) {
+            populateRoleSelects();
+        }
+    });
+
+    document.getElementById('change-password').addEventListener('change', () => {
+        document.getElementById('password-change').classList.toggle('d-none', !document.getElementById('change-password').checked);
+        document.getElementById('role-selection').classList.add('d-none');
+    });
+
+    document.getElementById('confirm-change').addEventListener('click', () => {
+        const action = document.querySelector('input[name="action"]:checked').value;
+        showConfirmModal(action === 'role' ? 'change_role' : 'change_password');
+    });
+
+    function generateQRCode(username) {
+        fetch('/generate_qr_for_user', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: 'username=' + encodeURIComponent(username)
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.qr_code) {
+                    const qrImage = document.createElement('img');
+                    qrImage.src = 'data:image/png;base64,' + data.qr_code;
+                    document.getElementById('qr-code-container').innerHTML = '';
+                    document.getElementById('qr-code-container').appendChild(qrImage);
+                    new bootstrap.Modal(document.getElementById('qr-code-modal')).show();
+                } else {
+                    showAlert('error', 'Error generating QR code');
+                }
+            });
+    }
+</script>
+
+{% endblock %}
